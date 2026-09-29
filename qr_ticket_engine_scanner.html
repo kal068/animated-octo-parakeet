@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRTicket - Free QR Ticketing & Verification Platform</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- QRCode.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- HTML5-QRCode Scanner Library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- Canvas-to-Image Helper (html2canvas) for high-res ticket download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .ticket-stub {
+      background-image: radial-gradient(circle at 0% 50%, transparent 12px, #1e293b 13px), radial-gradient(circle at 100% 50%, transparent 12px, #1e293b 13px);
+    }
+    #reader video {
+      border-radius: 0.75rem;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100 antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Brand Logo -->
+        <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('buy')">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
+            <i class="fa-solid font-bold fa-qrcode text-xl text-slate-950"></i>
+          </div>
+          <div>
+            <span class="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">PassPulse</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 font-semibold ml-1">100% Free</span>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex space-x-1">
+          <button onclick="switchTab('buy')" id="nav-buy" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 bg-slate-800 text-white shadow-sm">
+            <i class="fa-solid fa-ticket text-brand-400"></i> Get Ticket
+          </button>
+          <button onclick="switchTab('my-tickets')" id="nav-my-tickets" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60">
+            <i class="fa-solid fa-wallet"></i> My Passes <span id="ticket-count-badge" class="ml-1 px-1.5 py-0.2 text-xs rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">0</span>
+          </button>
+          <button onclick="switchTab('scanner')" id="nav-scanner" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60">
+            <i class="fa-solid fa-qrcode text-amber-400"></i> Door Staff & Scanner
+          </button>
+          <button onclick="switchTab('guide')" id="nav-guide" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60">
+            <i class="fa-solid fa-book-open text-sky-400"></i> Launch For $0
+          </button>
+        </nav>
+
+        <!-- Quick Status Indicator -->
+        <div class="flex items-center gap-3">
+          <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700/50">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Ledger: <strong id="ledger-mode-indicator" class="text-slate-200">Browser Local Storage</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Bar -->
+    <div class="md:hidden flex border-t border-slate-800 bg-slate-900 overflow-x-auto p-1.5 gap-1 text-xs">
+      <button onclick="switchTab('buy')" id="mobile-nav-buy" class="mobile-nav-btn flex-1 min-w-[80px] py-2 px-1 text-center rounded-md font-medium text-white bg-slate-800">
+        <i class="fa-solid fa-ticket block text-base mb-1 text-brand-400"></i> Get Ticket
+      </button>
+      <button onclick="switchTab('my-tickets')" id="mobile-nav-my-tickets" class="mobile-nav-btn flex-1 min-w-[80px] py-2 px-1 text-center rounded-md font-medium text-slate-400">
+        <i class="fa-solid fa-wallet block text-base mb-1"></i> My Passes
+      </button>
+      <button onclick="switchTab('scanner')" id="mobile-nav-scanner" class="mobile-nav-btn flex-1 min-w-[80px] py-2 px-1 text-center rounded-md font-medium text-slate-400">
+        <i class="fa-solid fa-qrcode block text-base mb-1 text-amber-400"></i> Scanner
+      </button>
+      <button onclick="switchTab('guide')" id="mobile-nav-guide" class="mobile-nav-btn flex-1 min-w-[80px] py-2 px-1 text-center rounded-md font-medium text-slate-400">
+        <i class="fa-solid fa-book-open block text-base mb-1 text-sky-400"></i> $0 Guide
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Toast Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- Main Content Body -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- SECTION 1: TICKET PURCHASE STORE -->
+    <section id="tab-buy" class="tab-content transition-opacity duration-200">
+      <div class="max-w-4xl mx-auto space-y-8">
+        
+        <!-- Hero Header -->
+        <div class="text-center space-y-3">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-xs font-semibold">
+            <i class="fa-solid fa-sparkles"></i> Instant Digital Pass Dispatch
+          </div>
+          <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">Select Your Event Experience</h1>
+          <p class="text-slate-400 text-sm sm:text-base max-w-xl mx-auto">
+            Choose your tier, enter your details, and receive an encrypted QR verification ticket directly to your browser device.
+          </p>
+        </div>
+
+        <div class="grid md:grid-cols-12 gap-8 items-start">
+          
+          <!-- Left Column: Tier Selection & Details -->
+          <div class="md:col-span-7 space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+              
+              <h2 class="text-lg font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+                <i class="fa-solid fa-layer-group text-brand-400"></i> 1. Choose Ticket Tier
+              </h2>
+
+              <div class="grid gap-3">
+                <!-- Tier 1 -->
+                <label class="relative flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-brand-500/50 cursor-pointer transition-all group">
+                  <div class="flex items-center gap-3">
+                    <input type="radio" name="ticket-tier" value="GA" data-name="General Admission" data-price="25" checked class="w-4 h-4 text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                    <div>
+                      <p class="font-semibold text-white group-hover:text-brand-400 transition-colors">General Admission</p>
+                      <p class="text-xs text-slate-400">Full event entry + digital pass access</p>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-lg font-bold text-white">$25</span>
+                    <span class="text-xs text-slate-500 block">USD</span>
+                  </div>
+                </label>
+
+                <!-- Tier 2 -->
+                <label class="relative flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-brand-500/50 cursor-pointer transition-all group">
+                  <div class="flex items-center gap-3">
+                    <input type="radio" name="ticket-tier" value="VIP" data-name="VIP All-Access" data-price="75" class="w-4 h-4 text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                    <div>
+                      <p class="font-semibold text-white group-hover:text-brand-400 transition-colors flex items-center gap-2">
+                        VIP All-Access
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">Popular</span>
+                      </p>
+                      <p class="text-xs text-slate-400">Priority entry + VIP Lounge + Front row</p>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-lg font-bold text-white">$75</span>
+                    <span class="text-xs text-slate-500 block">USD</span>
+                  </div>
+                </label>
+
+                <!-- Tier 3 -->
+                <label class="relative flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-brand-500/50 cursor-pointer transition-all group">
+                  <div class="flex items-center gap-3">
+                    <input type="radio" name="ticket-tier" value="EARLY" data-name="Early Bird Pass" data-price="15" class="w-4 h-4 text-brand-500 focus:ring-brand-500 border-slate-700 bg-slate-900">
+                    <div>
+                      <p class="font-semibold text-white group-hover:text-brand-400 transition-colors">Early Bird Pass</p>
+                      <p class="text-xs text-slate-400">Limited quantities remaining</p>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-lg font-bold text-white">$15</span>
+                    <span class="text-xs text-slate-500 block">USD</span>
+                  </div>
+                </label>
+              </div>
+
+              <h2 class="text-lg font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3 pt-2">
+                <i class="fa-solid fa-id-card text-brand-400"></i> 2. Ticket Holder Information
+              </h2>
+
+              <form id="purchase-form" onsubmit="handlePurchaseSubmit(event)" class="space-y-4">
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Full Name</label>
+                  <input type="text" id="holder-name" required placeholder="e.g., Alex Johnson" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-sm">
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Email Address</label>
+                  <input type="email" id="holder-email" required placeholder="alex@example.com" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-sm">
+                </div>
+
+                <!-- Simulation Mode Switcher -->
+                <div class="pt-2">
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Payment Option Simulation</label>
+                  <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button type="button" onclick="setPaymentMethod('simulated')" id="pay-mode-sim" class="p-3 rounded-xl border border-brand-500 bg-brand-500/10 text-white font-medium flex items-center justify-center gap-2">
+                      <i class="fa-solid fa-bolt text-brand-400"></i> Instant Test Order
+                    </button>
+                    <button type="button" onclick="setPaymentMethod('external')" id="pay-mode-ext" class="p-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 font-medium flex items-center justify-center gap-2">
+                      <i class="fa-brands fa-paypal text-sky-400"></i> Hosted Link Test
+                    </button>
+                  </div>
+                </div>
+
+                <div id="simulated-pay-notice" class="bg-slate-950/50 p-3 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-1">
+                  <p class="text-slate-300 font-medium"><i class="fa-solid fa-info-circle text-brand-400 mr-1"></i> Sandbox Test Mode Active</p>
+                  <p>Clicking "Complete Payment & Issue Ticket" will immediately generate and record your unique QR ticket in local storage.</p>
+                </div>
+
+                <div id="external-pay-notice" class="hidden bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-xs text-amber-300/90 space-y-1">
+                  <p class="font-semibold text-amber-200"><i class="fa-solid fa-external-link-alt mr-1"></i> External Gateway Simulation</p>
+                  <p>Simulates redirecting to Stripe/PayPal payment links before auto-issuing your verifiable ticket upon return.</p>
+                </div>
+
+                <button type="submit" id="btn-pay-submit" class="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all duration-200 flex items-center justify-center gap-2">
+                  <i class="fa-solid fa-lock"></i> Complete Payment & Issue Ticket ($<span id="submit-price-label">25</span>)
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Right Column: Live Pass Preview Card -->
+          <div class="md:col-span-5 space-y-4">
+            <div class="sticky top-24">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2 px-1">Live Ticket Pass Preview</span>
+              
+              <!-- Ticket Visual Card -->
+              <div class="bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl overflow-hidden shadow-2xl relative">
+                <!-- Decorative Glow Top -->
+                <div class="h-2 bg-gradient-to-r from-brand-500 via-emerald-400 to-teal-500"></div>
+                
+                <div class="p-5 space-y-4">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <p class="text-[10px] font-mono tracking-widest text-slate-400 uppercase">OFFICIAL EVENT PASS</p>
+                      <h3 class="text-lg font-extrabold text-white leading-tight">Tech Summit 2026</h3>
+                    </div>
+                    <span id="preview-tier-badge" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                      General Admission
+                    </span>
+                  </div>
+
+                  <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-center space-y-3">
+                    <div id="preview-qr-box" class="flex justify-center items-center bg-white p-3 rounded-lg w-36 h-36 mx-auto shadow-inner">
+                      <!-- QR Placeholder or preview -->
+                      <i class="fa-solid fa-qrcode text-6xl text-slate-300"></i>
+                    </div>
+                    <p class="text-[11px] font-mono text-slate-400 tracking-wider" id="preview-ticket-id">TKT-SAMPLE-2026</p>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2 text-xs border-t border-slate-800/80 pt-3">
+                    <div>
+                      <span class="text-slate-500 block text-[10px] uppercase font-semibold">Attendee</span>
+                      <span class="font-medium text-slate-200 truncate block" id="preview-holder-name">Your Name</span>
+                    </div>
+                    <div>
+                      <span class="text-slate-500 block text-[10px] uppercase font-semibold">Status</span>
+                      <span class="font-semibold text-emerald-400 flex items-center gap-1">
+                        <i class="fa-solid fa-circle-check text-[10px]"></i> VALID PASS
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="bg-slate-950/90 px-5 py-3 border-t border-slate-800/80 flex justify-between items-center text-[11px] text-slate-400">
+                  <span><i class="fa-solid fa-calendar text-slate-500 mr-1"></i> Oct 15, 2026</span>
+                  <span><i class="fa-solid fa-location-dot text-slate-500 mr-1"></i> Main Convention Center</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: MY TICKETS WALLET -->
+    <section id="tab-my-tickets" class="tab-content hidden transition-opacity duration-200">
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <h1 class="text-2xl font-bold text-white">Your Purchased Passes</h1>
+            <p class="text-slate-400 text-sm">Stored locally in your browser. Download or present these at the entrance.</p>
+          </div>
+          <button onclick="switchTab('buy')" class="px-4 py-2 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 hover:bg-brand-500/20 text-sm font-semibold transition-all">
+            + Purchase Another Ticket
+          </button>
+        </div>
+
+        <div id="tickets-gallery-container" class="grid sm:grid-cols-2 gap-6">
+          <!-- Populated via JavaScript -->
+        </div>
+
+        <div id="empty-tickets-state" class="hidden text-center py-16 bg-slate-900/50 rounded-2xl border border-slate-800/80 space-y-3">
+          <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-500 text-2xl">
+            <i class="fa-solid fa-ticket"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">No Tickets Found</h3>
+          <p class="text-slate-400 text-sm max-w-sm mx-auto">You haven't generated any tickets on this browser session yet.</p>
+          <button onclick="switchTab('buy')" class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-slate-950 font-bold text-sm transition-all shadow-lg shadow-brand-500/20">
+            Get Your First Ticket
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: DOOR STAFF SCANNER & LEDGER -->
+    <section id="tab-scanner" class="tab-content hidden transition-opacity duration-200">
+      <div class="max-w-5xl mx-auto space-y-8">
+        
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
+          <div>
+            <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold mb-2">
+              <i class="fa-solid fa-shield-halved"></i> Event Organizer Console
+            </div>
+            <h1 class="text-2xl font-bold text-white">Door Staff QR Scanner & Verification</h1>
+            <p class="text-slate-400 text-sm">Scan attendees' mobile tickets or physically printed passes to check in guests in real time.</p>
+          </div>
+
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <button onclick="exportLedgerJSON()" class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-download"></i> Export Ledger JSON
+            </button>
+            <label class="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 cursor-pointer transition-all flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-upload"></i> Import Ledger
+              <input type="file" id="ledger-import-file" accept=".json" onchange="importLedgerJSON(event)" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <!-- Realtime Statistics Overview Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+            <span class="text-xs font-medium text-slate-400 block">Total Issued</span>
+            <span class="text-2xl font-black text-white" id="stat-total-issued">0</span>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+            <span class="text-xs font-medium text-slate-400 block">Checked In</span>
+            <span class="text-2xl font-black text-emerald-400" id="stat-checked-in">0</span>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+            <span class="text-xs font-medium text-slate-400 block">Remaining</span>
+            <span class="text-2xl font-black text-amber-400" id="stat-remaining">0</span>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+            <span class="text-xs font-medium text-slate-400 block">Total Revenue</span>
+            <span class="text-2xl font-black text-brand-400" id="stat-total-revenue">$0</span>
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-12 gap-8 items-start">
+          
+          <!-- Scanner Camera & Manual Entry Block -->
+          <div class="lg:col-span-6 space-y-6">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
+              
+              <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h2 class="font-bold text-white flex items-center gap-2">
+                  <i class="fa-solid fa-camera text-amber-400"></i> Live Camera Scanner
+                </h2>
+                <button id="btn-toggle-camera" onclick="toggleCameraScanner()" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-slate-950 font-bold text-xs transition-all flex items-center gap-1.5">
+                  <i class="fa-solid fa-video"></i> Start Camera
+                </button>
+              </div>
+
+              <!-- Camera Video Viewport -->
+              <div id="scanner-wrapper" class="relative bg-slate-950 rounded-xl overflow-hidden border border-slate-800 min-h-[260px] flex items-center justify-center">
+                <div id="reader" class="w-full"></div>
+                <div id="scanner-placeholder" class="text-center p-6 space-y-2">
+                  <i class="fa-solid fa-qrcode text-5xl text-slate-700 animate-pulse"></i>
+                  <p class="text-slate-400 text-xs">Click "Start Camera" to grant webcam access for QR verification.</p>
+                </div>
+              </div>
+
+              <!-- Manual ID Search Backup -->
+              <div class="pt-2">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Manual Ticket Lookup / Paste Payload</label>
+                <div class="flex gap-2">
+                  <input type="text" id="manual-lookup-id" placeholder="e.g., TKT-8X92K-2026" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-slate-100 text-sm font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400">
+                  <button onclick="performManualLookup()" class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-all">
+                    Verify
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Live Scan Result Card Display -->
+          <div class="lg:col-span-6 space-y-6">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
+              <h2 class="font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+                <i class="fa-solid fa-clipboard-check text-brand-400"></i> Verification Status Output
+              </h2>
+
+              <div id="scan-result-card" class="bg-slate-950 border border-slate-800 rounded-xl p-6 text-center space-y-4">
+                <div class="w-16 h-16 rounded-full bg-slate-800 text-slate-500 flex items-center justify-center mx-auto text-2xl">
+                  <i class="fa-solid fa-barcode"></i>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-slate-300">Awaiting Scan Input</h3>
+                  <p class="text-slate-500 text-xs max-w-xs mx-auto mt-1">Point staff camera at an attendee's QR code or type their Ticket ID above.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Full Local Ledger Table -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden space-y-4 p-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 class="font-bold text-white text-lg">Master Ticket Ledger</h2>
+              <p class="text-slate-400 text-xs">All issued tickets recorded in local database.</p>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="clearAllLedgerData()" class="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 text-xs font-semibold transition-all">
+                <i class="fa-solid fa-trash mr-1"></i> Reset Ledger
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th class="py-3 px-4">Ticket ID</th>
+                  <th class="py-3 px-4">Holder Name</th>
+                  <th class="py-3 px-4">Tier</th>
+                  <th class="py-3 px-4">Issued Date</th>
+                  <th class="py-3 px-4">Status</th>
+                  <th class="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="ledger-table-body" class="divide-y divide-slate-800/60 font-mono">
+                <!-- Populated JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- SECTION 4: ZERO-COST HOSTING GUIDE -->
+    <section id="tab-guide" class="tab-content hidden transition-opacity duration-200">
+      <div class="max-w-4xl mx-auto space-y-8">
+        
+        <div class="text-center space-y-3">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-semibold">
+            <i class="fa-solid fa-dollar-sign"></i> Blueprint for $0 Overhead
+          </div>
+          <h1 class="text-3xl font-extrabold text-white">How to Host & Launch This App 100% Free</h1>
+          <p class="text-slate-400 text-sm max-w-xl mx-auto">
+            You do not need to pay monthly fees for servers, databases, or SaaS ticketing tools. Follow this exact zero-budget architecture stack.
+          </p>
+        </div>
+
+        <!-- Architecture Stack Grid -->
+        <div class="grid md:grid-cols-3 gap-6">
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
+            <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center text-xl font-bold">1</div>
+            <h3 class="text-base font-bold text-white">Free Web Hosting</h3>
+            <p class="text-slate-400 text-xs leading-relaxed">
+              Host this exact single-file HTML/JS app online with custom domains and SSL certificates at zero monthly cost.
+            </p>
+            <ul class="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> GitHub Pages (Easiest)</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Vercel / Netlify</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Cloudflare Pages</li>
+            </ul>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl font-bold">2</div>
+            <h3 class="text-base font-bold text-white">No-Upfront Fee Payments</h3>
+            <p class="text-slate-400 text-xs leading-relaxed">
+              Collect money directly from buyers without paying upfront subscription fees. Only pay standard transaction fees when you make a sale.
+            </p>
+            <ul class="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Stripe Payment Links</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> PayPal Checkout Buttons</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Buy Me a Coffee / Ko-fi</li>
+            </ul>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-xl font-bold">3</div>
+            <h3 class="text-base font-bold text-white">Free Database Sync</h3>
+            <p class="text-slate-400 text-xs leading-relaxed">
+              Keep ticket verifications in sync across multiple door staff phones without paying for paid backend servers.
+            </p>
+            <ul class="text-xs text-slate-300 space-y-1.5 pt-2 border-t border-slate-800">
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Google Sheets API (Free)</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Firebase Realtime DB (Free Tier)</li>
+              <li class="flex items-center gap-2"><i class="fa-solid fa-check text-brand-400"></i> Export/Import JSON (Built-in)</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Step-By-Step Hosting Setup Accordion -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+            <i class="fa-solid fa-rocket text-sky-400"></i> Step-by-Step Deployment Guide (10 Minutes)
+          </h2>
+
+          <div class="space-y-4 text-xs text-slate-300 leading-relaxed">
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+              <h4 class="font-bold text-white text-sm">Step 1: Save This File</h4>
+              <p class="text-slate-400">Save this entire code snippet into a file named <code class="text-brand-400 font-mono">index.html</code> on your computer.</p>
+            </div>
+
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+              <h4 class="font-bold text-white text-sm">Step 2: Upload to GitHub Pages (Free Web Host)</h4>
+              <ol class="list-decimal list-inside text-slate-400 space-y-1">
+                <li>Create a free account on <a href="https://github.com" target="_blank" class="text-sky-400 underline">GitHub.com</a>.</li>
+                <li>Create a new public repository named <code class="text-slate-200 font-mono">my-event-tickets</code>.</li>
+                <li>Upload your <code class="text-slate-200 font-mono">index.html</code> file.</li>
+                <li>Go to <strong>Settings &gt; Pages</strong> and set Branch to <code class="text-slate-200 font-mono">main</code>.</li>
+                <li>Within 60 seconds, GitHub gives you a live website link like <code class="text-brand-400 font-mono">https://yourusername.github.io/my-event-tickets</code>!</li>
+              </ol>
+            </div>
+
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+              <h4 class="font-bold text-white text-sm">Step 3: Attach Stripe or PayPal Payment Links</h4>
+              <p class="text-slate-400">
+                Sign up for Stripe or PayPal. Create a free <strong>Payment Link</strong> for your ticket price. After users pay, configure Stripe/PayPal's "Redirect Page" to send them straight back to your hosted site URL.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Audio Chimes for Door Scanning Feedback (Generated Web Audio Synthesizer) -->
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playBeep(type) {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'success') {
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1); // A5
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      } else if (type === 'warning') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(200, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } else if (type === 'error') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      }
+    }
+  </script>
+
+  <!-- Main JavaScript Logic Engine -->
+  <script>
+    const STORAGE_KEY = 'passpulse_tickets_ledger_v1';
+    let activePaymentMethod = 'simulated';
+    let html5QrcodeScanner = null;
+    let isCameraActive = false;
+
+    // Default Seed Data if Storage is empty
+    const defaultTickets = [
+      {
+        id: 'TKT-8X92K-2026',
+        name: 'Sarah Connor',
+        email: 'sarah@example.com',
+        tier: 'VIP',
+        tierName: 'VIP All-Access',
+        price: 75,
+        status: 'Valid',
+        issuedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+        checkedInAt: null
+      },
+      {
+        id: 'TKT-3M17P-2026',
+        name: 'David Miller',
+        email: 'david@example.com',
+        tier: 'GA',
+        tierName: 'General Admission',
+        price: 25,
+        status: 'Used',
+        issuedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+        checkedInAt: new Date(Date.now() - 3600000 * 2).toISOString()
+      }
+    ];
+
+    // Initialize Ledger Data
+    function getLedger() {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (!data) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultTickets));
+        return defaultTickets;
+      }
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        return defaultTickets;
+      }
+    }
+
+    function saveLedger(ledger) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
+      updateUI();
+    }
+
+    // App Initialization
+    window.onload = function() {
+      setupFormListeners();
+      updateUI();
+      renderLivePreview();
+    };
+
+    function switchTab(tabId) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      
+      // Update Tab Buttons Desktop
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('bg-slate-800', 'text-white', 'shadow-sm');
+        btn.classList.add('text-slate-400');
+      });
+
+      // Update Mobile Nav
+      document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+        btn.classList.remove('bg-slate-800', 'text-white');
+        btn.classList.add('text-slate-400');
+      });
+
+      // Show Selected Tab
+      const targetTab = document.getElementById(`tab-${tabId}`);
+      if (targetTab) {
+        targetTab.classList.remove('hidden');
+      }
+
+      // Highlight active nav
+      const activeNav = document.getElementById(`nav-${tabId}`);
+      if (activeNav) {
+        activeNav.classList.add('bg-slate-800', 'text-white', 'shadow-sm');
+        activeNav.classList.remove('text-slate-400');
+      }
+
+      const activeMobileNav = document.getElementById(`mobile-nav-${tabId}`);
+      if (activeMobileNav) {
+        activeMobileNav.classList.add('bg-slate-800', 'text-white');
+        activeMobileNav.classList.remove('text-slate-400');
+      }
+
+      // Stop camera if navigating away from scanner
+      if (tabId !== 'scanner' && isCameraActive) {
+        stopCameraScanner();
+      }
+
+      // Refresh gallery if opening my-tickets
+      if (tabId === 'my-tickets') {
+        renderTicketsGallery();
+      }
+    }
+
+    function setupFormListeners() {
+      const nameInput = document.getElementById('holder-name');
+      const radios = document.querySelectorAll('input[name="ticket-tier"]');
+
+      nameInput.addEventListener('input', renderLivePreview);
+      radios.forEach(radio => radio.addEventListener('change', renderLivePreview));
+    }
+
+    function setPaymentMethod(method) {
+      activePaymentMethod = method;
+      const simBtn = document.getElementById('pay-mode-sim');
+      const extBtn = document.getElementById('pay-mode-ext');
+      const simNotice = document.getElementById('simulated-pay-notice');
+      const extNotice = document.getElementById('external-pay-notice');
+
+      if (method === 'simulated') {
+        simBtn.className = 'p-3 rounded-xl border border-brand-500 bg-brand-500/10 text-white font-medium flex items-center justify-center gap-2';
+        extBtn.className = 'p-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 font-medium flex items-center justify-center gap-2';
+        simNotice.classList.remove('hidden');
+        extNotice.classList.add('hidden');
+      } else {
+        extBtn.className = 'p-3 rounded-xl border border-amber-500 bg-amber-500/10 text-amber-200 font-medium flex items-center justify-center gap-2';
+        simBtn.className = 'p-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 font-medium flex items-center justify-center gap-2';
+        extNotice.classList.remove('hidden');
+        simNotice.classList.add('hidden');
+      }
+    }
+
+    function renderLivePreview() {
+      const nameVal = document.getElementById('holder-name').value.trim() || 'Your Name';
+      const selectedTier = document.querySelector('input[name="ticket-tier"]:checked');
+      const tierName = selectedTier.getAttribute('data-name');
+      const price = selectedTier.getAttribute('data-price');
+
+      document.getElementById('preview-holder-name').textContent = nameVal;
+      document.getElementById('preview-tier-badge').textContent = tierName;
+      document.getElementById('submit-price-label').textContent = price;
+
+      // Render dummy preview QR code
+      const qrBox = document.getElementById('preview-qr-box');
+      qrBox.innerHTML = '';
+      new QRCode(qrBox, {
+        text: `PASS-PREVIEW-${tierName}`,
+        width: 128,
+        height: 128,
+        colorDark : "#020617",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.H
+      });
+    }
+
+    function handlePurchaseSubmit(e) {
+      e.preventDefault();
+
+      const name = document.getElementById('holder-name').value.trim();
+      const email = document.getElementById('holder-email').value.trim();
+      const selectedTier = document.querySelector('input[name="ticket-tier"]:checked');
+      const tierCode = selectedTier.value;
+      const tierName = selectedTier.getAttribute('data-name');
+      const price = parseFloat(selectedTier.getAttribute('data-price'));
+
+      if (!name || !email) {
+        showToast('Please complete all required fields.', 'error');
+        return;
+      }
+
+      // Unique Ticket ID Generator
+      const randomHash = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const ticketId = `TKT-${randomHash}-2026`;
+
+      const newTicket = {
+        id: ticketId,
+        name: name,
+        email: email,
+        tier: tierCode,
+        tierName: tierName,
+        price: price,
+        status: 'Valid',
+        issuedAt: new Date().toISOString(),
+        checkedInAt: null
+      };
+
+      // Save into Local Ledger
+      const ledger = getLedger();
+      ledger.unshift(newTicket);
+      saveLedger(ledger);
+
+      playBeep('success');
+      showToast(`Payment Approved! Ticket ${ticketId} issued successfully.`, 'success');
+
+      // Reset form
+      document.getElementById('purchase-form').reset();
+      renderLivePreview();
+
+      // Switch user to My Tickets tab to view pass
+      switchTab('my-tickets');
+    }
+
+    function renderTicketsGallery() {
+      const container = document.getElementById('tickets-gallery-container');
+      const emptyState = document.getElementById('empty-tickets-state');
+      const ledger = getLedger();
+
+      container.innerHTML = '';
+
+      if (ledger.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+      emptyState.classList.add('hidden');
+
+      ledger.forEach((ticket, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4 relative flex flex-col justify-between';
+        
+        const isUsed = ticket.status === 'Used';
+        const dateStr = new Date(ticket.issuedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+        card.innerHTML = `
+          <div>
+            <!-- Ticket Top Badge Header -->
+            <div class="p-4 bg-slate-950/80 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                <span class="text-[10px] font-mono text-slate-500 uppercase tracking-wider block">ID: ${ticket.id}</span>
+                <span class="text-xs font-bold text-white">${ticket.tierName}</span>
+              </div>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isUsed ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                ${isUsed ? 'CHECKED IN' : 'VALID PASS'}
+              </span>
+            </div>
+
+            <!-- Pass Core Content -->
+            <div id="ticket-pass-element-${idx}" class="p-5 bg-slate-900 space-y-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="text-base font-extrabold text-white">Tech Summit 2026</h4>
+                  <p class="text-xs text-slate-400"><i class="fa-solid fa-user text-slate-500 mr-1"></i> ${escapeHTML(ticket.name)}</p>
+                </div>
+                <div class="text-right">
+                  <span class="text-xs font-mono font-bold text-slate-300">$${ticket.price} USD</span>
+                  <span class="text-[10px] text-slate-500 block">${dateStr}</span>
+                </div>
+              </div>
+
+              <!-- High Res Rendered QR Area -->
+              <div class="bg-white p-3 rounded-xl text-center flex flex-col items-center justify-center space-y-1 shadow-md">
+                <div id="qr-target-${idx}" class="p-1"></div>
+                <p class="text-[10px] font-mono text-slate-900 font-bold">${ticket.id}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons -->
+          <div class="p-4 bg-slate-950/50 border-t border-slate-800 flex gap-2">
+            <button onclick="downloadTicketPNG('${ticket.id}', 'ticket-pass-element-${idx}')" class="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center justify-center gap-1">
+              <i class="fa-solid fa-download text-brand-400"></i> Save Image
+            </button>
+            <button onclick="copyToClipboard('${ticket.id}')" class="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-all">
+              <i class="fa-solid fa-copy"></i>
+            </button>
+          </div>
+        `;
+
+        container.appendChild(card);
+
+        // Generate QR code for card
+        setTimeout(() => {
+          const target = document.getElementById(`qr-target-${idx}`);
+          if (target && target.children.length === 0) {
+            new QRCode(target, {
+              text: ticket.id,
+              width: 120,
+              height: 120,
+              colorDark : "#020617",
+              colorLight : "#ffffff",
+              correctLevel : QRCode.CorrectLevel.H
+            });
+          }
+        }, 50);
+      });
+    }
+
+    function toggleCameraScanner() {
+      if (isCameraActive) {
+        stopCameraScanner();
+      } else {
+        startCameraScanner();
+      }
+    }
+
+    function startCameraScanner() {
+      const placeholder = document.getElementById('scanner-placeholder');
+      placeholder.classList.add('hidden');
+
+      html5QrcodeScanner = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+      html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
+        .then(() => {
+          isCameraActive = true;
+          document.getElementById('btn-toggle-camera').innerHTML = `<i class="fa-solid fa-stop"></i> Stop Camera`;
+          document.getElementById('btn-toggle-camera').className = `px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-all flex items-center gap-1.5`;
+        })
+        .catch(err => {
+          showToast('Unable to access camera: ' + err, 'error');
+          placeholder.classList.remove('hidden');
+        });
+    }
+
+    function stopCameraScanner() {
+      if (html5QrcodeScanner && isCameraActive) {
+        html5QrcodeScanner.stop().then(() => {
+          html5QrcodeScanner.clear();
+          isCameraActive = false;
+          document.getElementById('scanner-placeholder').classList.remove('hidden');
+          document.getElementById('btn-toggle-camera').innerHTML = `<i class="fa-solid fa-video"></i> Start Camera`;
+          document.getElementById('btn-toggle-camera').className = `px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-slate-950 font-bold text-xs transition-all flex items-center gap-1.5`;
+        }).catch(err => console.error(err));
+      }
+    }
+
+    function onScanSuccess(decodedText) {
+      processTicketVerification(decodedText.trim());
+    }
+
+    function performManualLookup() {
+      const input = document.getElementById('manual-lookup-id').value.trim();
+      if (!input) {
+        showToast('Please enter or paste a Ticket ID', 'error');
+        return;
+      }
+      processTicketVerification(input);
+    }
+
+    function processTicketVerification(scannedId) {
+      const ledger = getLedger();
+      const ticketIndex = ledger.findIndex(t => t.id.toLowerCase() === scannedId.toLowerCase());
+      const resultCard = document.getElementById('scan-result-card');
+
+      if (ticketIndex === -1) {
+        // INVALID / UNRECOGNIZED TICKET
+        playBeep('error');
+        resultCard.className = "bg-red-950/40 border-2 border-red-500/80 rounded-xl p-6 text-center space-y-4 animate-shake";
+        resultCard.innerHTML = `
+          <div class="w-16 h-16 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto text-3xl border border-red-500/30">
+            <i class="fa-solid fa-xmark"></i>
+          </div>
+          <div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/40 uppercase tracking-wide">INVALID TICKET</span>
+            <h3 class="text-xl font-black text-white mt-2">${escapeHTML(scannedId)}</h3>
+            <p class="text-red-300/80 text-xs mt-1">This ticket ID was not found in the master database ledger.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const ticket = ledger[ticketIndex];
+
+      if (ticket.status === 'Used') {
+        // ALREADY USED TICKET
+        playBeep('warning');
+        const checkedTime = ticket.checkedInAt ? new Date(ticket.checkedInAt).toLocaleTimeString() : 'Earlier';
+
+        resultCard.className = "bg-amber-950/40 border-2 border-amber-500/80 rounded-xl p-6 text-center space-y-4";
+        resultCard.innerHTML = `
+          <div class="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto text-3xl border border-amber-500/30">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wide">ALREADY CHECKED IN</span>
+            <h3 class="text-xl font-extrabold text-white mt-2">${escapeHTML(ticket.name)}</h3>
+            <p class="text-amber-200/90 text-xs mt-1 font-mono">${ticket.id} (${ticket.tierName})</p>
+            <p class="text-slate-400 text-xs mt-2">Scanned entry previously recorded at <strong>${checkedTime}</strong>.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // VALID TICKET
+      playBeep('success');
+      resultCard.className = "bg-emerald-950/40 border-2 border-emerald-500/80 rounded-xl p-6 text-center space-y-4";
+      resultCard.innerHTML = `
+        <div class="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-3xl border border-emerald-500/30">
+          <i class="fa-solid fa-check"></i>
+        </div>
+        <div>
+          <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wide">VALID PASS</span>
+          <h3 class="text-2xl font-black text-white mt-2">${escapeHTML(ticket.name)}</h3>
+          <p class="text-emerald-300 text-xs font-mono mt-1">${ticket.id} • ${ticket.tierName}</p>
+          <p class="text-slate-400 text-xs mt-1">${ticket.email}</p>
+        </div>
+        
+        <button onclick="markTicketAsUsed('${ticket.id}')" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-brand-600 hover:from-emerald-400 hover:to-brand-500 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
+          <i class="fa-solid fa-user-check"></i> Check-in Guest Now
+        </button>
+      `;
+    }
+
+    function markTicketAsUsed(ticketId) {
+      const ledger = getLedger();
+      const ticket = ledger.find(t => t.id === ticketId);
+      if (ticket) {
+        ticket.status = 'Used';
+        ticket.checkedInAt = new Date().toISOString();
+        saveLedger(ledger);
+        playBeep('success');
+        showToast(`Guest ${ticket.name} checked in!`, 'success');
+        
+        // Refresh verification status card
+        processTicketVerification(ticketId);
+      }
+    }
+
+    function updateUI() {
+      const ledger = getLedger();
+
+      // Stats
+      const totalIssued = ledger.length;
+      const checkedIn = ledger.filter(t => t.status === 'Used').length;
+      const remaining = totalIssued - checkedIn;
+      const totalRevenue = ledger.reduce((sum, t) => sum + (t.price || 0), 0);
+
+      document.getElementById('stat-total-issued').textContent = totalIssued;
+      document.getElementById('stat-checked-in').textContent = checkedIn;
+      document.getElementById('stat-remaining').textContent = remaining;
+      document.getElementById('stat-total-revenue').textContent = `$${totalRevenue}`;
+      document.getElementById('ticket-count-badge').textContent = totalIssued;
+
+      // Render Ledger Table
+      const tbody = document.getElementById('ledger-table-body');
+      tbody.innerHTML = '';
+
+      if (ledger.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-500 font-sans">Ledger is empty.</td></tr>`;
+        return;
+      }
+
+      ledger.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition-colors';
+
+        const isUsed = t.status === 'Used';
+        const dateStr = new Date(t.issuedAt).toLocaleDateString();
+
+        tr.innerHTML = `
+          <td class="py-3 px-4 font-bold text-white">${t.id}</td>
+          <td class="py-3 px-4 font-sans font-medium text-slate-200">${escapeHTML(t.name)}</td>
+          <td class="py-3 px-4 font-sans">${t.tierName}</td>
+          <td class="py-3 px-4 text-slate-400">${dateStr}</td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-sans font-bold ${isUsed ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}">
+              ${isUsed ? 'Used' : 'Valid'}
+            </span>
+          </td>
+          <td class="py-3 px-4 text-right font-sans">
+            ${!isUsed ? `<button onclick="markTicketAsUsed('${t.id}')" class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-[11px] font-semibold">Check In</button>` : `<span class="text-slate-500 text-[11px]">Checked in</span>`}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function exportLedgerJSON() {
+      const ledger = getLedger();
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(ledger, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `qrtickets_ledger_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('Ledger JSON exported successfully.', 'success');
+    }
+
+    function importLedgerJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          if (Array.isArray(importedData)) {
+            saveLedger(importedData);
+            showToast('Ledger data imported successfully!', 'success');
+          } else {
+            showToast('Invalid JSON ledger format.', 'error');
+          }
+        } catch (err) {
+          showToast('Error parsing JSON file.', 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function clearAllLedgerData() {
+      if (confirm('Are you sure you want to clear all tickets in local storage? Make sure to export a backup JSON first.')) {
+        localStorage.removeItem(STORAGE_KEY);
+        updateUI();
+        showToast('Ledger database cleared.', 'warning');
+      }
+    }
+
+    function downloadTicketPNG(ticketId, elementId) {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+
+      showToast('Generating high-resolution pass image...', 'info');
+
+      html2canvas(element, { backgroundColor: '#0f172a', scale: 2 }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = `Pass_${ticketId}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      });
+    }
+
+    function copyToClipboard(text) {
+      const tempInput = document.createElement("input");
+      tempInput.value = text;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand("copy");
+      document.body.removeChild(tempInput);
+      showToast('Ticket ID copied to clipboard!', 'info');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      let borderColors = 'border-sky-500 bg-slate-900 text-sky-200';
+      let icon = 'fa-circle-info text-sky-400';
+
+      if (type === 'success') {
+        borderColors = 'border-brand-500 bg-slate-900 text-brand-200';
+        icon = 'fa-circle-check text-brand-400';
+      } else if (type === 'warning') {
+        borderColors = 'border-amber-500 bg-slate-900 text-amber-200';
+        icon = 'fa-triangle-exclamation text-amber-400';
+      } else if (type === 'error') {
+        borderColors = 'border-red-500 bg-slate-900 text-red-200';
+        icon = 'fa-circle-xmark text-red-400';
+      }
+
+      toast.className = `p-4 rounded-xl border ${borderColors} shadow-2xl flex items-center gap-3 text-xs font-medium pointer-events-auto transition-all transform translate-y-2 opacity-0 duration-200`;
+      toast.innerHTML = `<i class="fa-solid ${icon} text-lg"></i> <span>${escapeHTML(message)}</span>`;
+
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 200);
+      }, 3500);
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+  </script>
+</body>
+</html>
